@@ -15,6 +15,22 @@ local Theme = {
 }
 
 -- ====================================================================
+-- オブジェクトID設定
+-- ====================================================================
+local ObjectIDConfig = {
+    CurrentObjectID = "FireworkSparkler",  -- デフォルトはFireworkSparkler
+    AvailableObjects = {
+        "FireworkSparkler",
+        "PalletLightBrown",
+        "GlassBoxGray",      -- 追加
+        "MusicKeyboard",     -- 追加
+        "SpookyCandle1",     -- 追加
+        "Tetracube1",        -- 追加
+        "NinjaKatana"        -- 追加
+    }
+}
+
+-- ====================================================================
 -- 横一列の配置設定（羽） - 独立した設定
 -- ====================================================================
 local FeatherConfig = {
@@ -26,6 +42,7 @@ local FeatherConfig = {
     tiltAngle = 45,
     waveSpeed = 2,
     baseAmplitude = 1,
+    symmetryMode = true,  -- 左右対称モードを追加
 }
 
 -- 羽の専用変数
@@ -71,7 +88,7 @@ local HeartLoopConn = nil
 local HeartTime = 0
 
 -- ====================================================================
--- おっきぃ♡配置機能（大きいハート）- 速度設定を拡張
+-- おっきぃ♡配置機能（大きいハート）- 速度拡張版
 -- ====================================================================
 local BigHeartConfig = {
     Enabled = false,
@@ -160,31 +177,7 @@ local SuperRingLoopConn = nil
 local SuperRingTime = 0
 
 -- ====================================================================
--- 卍マンジ配置機能（追加）
--- ====================================================================
-local ManjiConfig = {
-    Enabled = false,
-    Height = 6.0,           -- 高さ
-    Size = 8.0,             -- サイズ
-    ObjectCount = 16,       -- 花火の数
-    RotationSpeed = 1.0,    -- 回転速度
-    RotationSpeedMax = 15.0, -- 最大回転速度
-    PulseSpeed = 2.0,       -- 脈動速度
-    PulseSpeedMax = 15.0,   -- 最大脈動速度
-    PulseAmplitude = 0.8,   -- 脈動振幅
-    FollowPlayer = true,    -- プレイヤーを追従
-    ArmLength = 1.5,        -- 卍の腕の長さ
-    ArmThickness = 0.3,     -- 腕の太さ
-}
-
-local ManjiToys = {}
-local ManjiPoints = {}
-local ManjiAssignedToys = {}
-local ManjiLoopConn = nil
-local ManjiTime = 0
-
--- ====================================================================
--- スター2✫配置機能（追加 - 太陽のようなギザギザ模様）
+-- スター2✫配置機能（修正版 - 広がりすぎ問題修正）
 -- ====================================================================
 local Star2Config = {
     Enabled = false,
@@ -203,6 +196,7 @@ local Star2Config = {
     JitterSpeed = 5.0,      -- ギザギザの揺れ速度
     JitterAmount = 1.0,     -- ギザギザの揺れ量
     SizeMax = 30.0,         -- 最大サイズ
+    MaxDistance = 50.0,     -- 最大距離（追加：広がりすぎ防止）
 }
 
 local Star2Toys = {}
@@ -212,24 +206,65 @@ local Star2LoopConn = nil
 local Star2Time = 0
 
 -- ====================================================================
+-- 球体◯配置機能 - 竜巻の仕組みを利用して立体球体
+-- ====================================================================
+local SphereConfig = {
+    Enabled = false,
+    BaseHeight = 0,         -- 基本高さ（球体の中心）
+    Radius = 5.0,           -- 球体の半径
+    ObjectCount = 20,       -- 花火の数
+    HorizontalRotationSpeed = 2.0,  -- 水平回転速度
+    VerticalRotationSpeed = 1.0,    -- 垂直回転速度
+    SpiralSpeed = 0.5,      -- らせん速度
+    WaveSpeed = 1.0,        -- 波の速度
+    WaveAmplitude = 0.3,    -- 波の振幅
+    FollowPlayer = true,    -- プレイヤーを追従
+    SphereMode = true,      -- 球体モード
+    Latitudes = 3,          -- 緯線の数
+    Longitudes = 6,         -- 経線の数
+    PulseSpeed = 1.0,       -- 脈動速度
+    PulseAmplitude = 0.5,   -- 脈動振幅
+}
+
+local SphereToys = {}
+local SpherePoints = {}
+local SphereAssignedToys = {}
+local SphereLoopConn = nil
+local SphereTime = 0
+
+-- ====================================================================
 -- 便利機能 (Mi(=^・^=))
 -- ====================================================================
 local UtilityConfig = {
     InfiniteJump = false,
     Noclip = false,
+    TPWalk = false,
+    WalkSpeed = 16,         -- 通常の歩行速度
+    TPWalkSpeed = 50,       -- TPWalkの速度
+    TPWalkSpeedMax = 200,   -- TPWalkの最大速度
+    ESP = false,            -- ESP機能
+    FOV = 70,               -- デフォルトFOV
+    OriginalFOV = 70,       -- 元のFOV
+    MaxFOV = 180,           -- 最大FOV
+    MinFOV = -5,            -- 最小FOV
 }
 
 local NoclipConnection = nil
 local OriginalCollision = {}
+local TPWalkConnection = nil
+local OriginalWalkSpeed = 16
+local ESPConnection = nil
+local ESPLabels = {}
+local Camera = workspace.CurrentCamera
 
 -- ====================================================================
 -- 共通ユーティリティ関数
 -- ====================================================================
-local function findFireworkSparklers()
+local function findObjects()
     local toys = {}
     
     for _, item in ipairs(workspace:GetDescendants()) do
-        if item:IsA("Model") and item.Name == "FireworkSparkler" then
+        if item:IsA("Model") and item.Name == ObjectIDConfig.CurrentObjectID then
             local alreadyAdded = false
             for _, existingToy in ipairs(toys) do
                 if existingToy == item then
@@ -255,7 +290,7 @@ local function getPrimaryPart(model)
         return model.PrimaryPart
     end
     
-    local potentialParts = {"Handle", "Main", "Part", "Base", "Sparkler", "Firework"}
+    local potentialParts = {"Handle", "Main", "Part", "Base", "Sparkler", "Firework", "Blade", "Candle", "Keyboard", "Box"}
     for _, partName in ipairs(potentialParts) do
         local part = model:FindFirstChild(partName)
         if part and part:IsA("BasePart") then
@@ -270,6 +305,67 @@ local function getPrimaryPart(model)
     end
     
     return nil
+end
+
+-- ====================================================================
+-- オブジェクトID切り替え関数
+-- ====================================================================
+local function changeObjectID(id)
+    if id == ObjectIDConfig.CurrentObjectID then
+        return
+    end
+    
+    ObjectIDConfig.CurrentObjectID = id
+    
+    -- 現在有効な機能があれば再起動
+    local activeFunctions = {}
+    
+    if FeatherConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleFeather, name = "羽[Feather]"})
+    end
+    if RingConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleRingAura, name = "魔法陣［RingX2］"})
+    end
+    if HeartConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleHeart, name = "♡ハート♡"})
+    end
+    if BigHeartConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleBigHeart, name = "おっきぃ♡"})
+    end
+    if StarOfDavidConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleStarOfDavid, name = "ダビデ✡"})
+    end
+    if StarConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleStar, name = "スター★"})
+    end
+    if SuperRingConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleSuperRing, name = "SuperRing"})
+    end
+    if Star2Config.Enabled then
+        table.insert(activeFunctions, {func = toggleStar2, name = "スター2✫"})
+    end
+    if SphereConfig.Enabled then
+        table.insert(activeFunctions, {func = toggleSphere, name = "球体◯"})
+    end
+    
+    -- 全ての機能を一時停止
+    for _, funcInfo in ipairs(activeFunctions) do
+        funcInfo.func(false)
+    end
+    
+    task.wait(0.5)
+    
+    -- 再起動
+    for _, funcInfo in ipairs(activeFunctions) do
+        funcInfo.func(true)
+    end
+    
+    OrionLib:MakeNotification({
+        Name = "オブジェクトID変更",
+        Content = id .. " に切り替えました",
+        Image = "rbxassetid://4483362458",
+        Time = 3
+    })
 end
 
 -- ====================================================================
@@ -321,18 +417,268 @@ local function disableNoclip()
 end
 
 -- ====================================================================
--- 羽（Feather）機能専用関数
+-- TPWalk機能（スマホ対応版）
+-- ====================================================================
+local function enableTPWalk()
+    if TPWalkConnection then
+        TPWalkConnection:Disconnect()
+        TPWalkConnection = nil
+    end
+    
+    -- 元の歩行速度を保存
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            OriginalWalkSpeed = humanoid.WalkSpeed
+        end
+    end
+    
+    TPWalkConnection = RunService.RenderStepped:Connect(function(dt)
+        if not UtilityConfig.TPWalk or not LocalPlayer.Character then
+            return
+        end
+        
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if humanoid and humanoidRootPart then
+            -- TPWalk速度を設定
+            humanoid.WalkSpeed = UtilityConfig.TPWalkSpeed
+            
+            -- 移動方向を初期化
+            local moveDirection = Vector3.new(0, 0, 0)
+            
+            -- モバイル用のタッチ入力とPC用のキーボード入力の両方をサポート
+            local moveVector = humanoid.MoveDirection
+            
+            if moveVector.Magnitude > 0 then
+                -- モバイルのジョイスティック入力を使用
+                moveDirection = moveVector
+            else
+                -- PCのキーボード入力を使用
+                -- 前方移動 (W)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    moveDirection = moveDirection + humanoidRootPart.CFrame.LookVector
+                end
+                
+                -- 後方移動 (S)
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    moveDirection = moveDirection - humanoidRootPart.CFrame.LookVector
+                end
+                
+                -- 左移動 (A)
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    moveDirection = moveDirection - humanoidRootPart.CFrame.RightVector
+                end
+                
+                -- 右移動 (D)
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    moveDirection = moveDirection + humanoidRootPart.CFrame.RightVector
+                end
+            end
+            
+            -- 移動方向を正規化して速度を適用
+            if moveDirection.Magnitude > 0 then
+                moveDirection = moveDirection.Unit
+                humanoidRootPart.Velocity = Vector3.new(moveDirection.X * UtilityConfig.TPWalkSpeed, 
+                                                       humanoidRootPart.Velocity.Y, 
+                                                       moveDirection.Z * UtilityConfig.TPWalkSpeed)
+            else
+                -- 入力がない場合は横方向の速度をゼロに
+                humanoidRootPart.Velocity = Vector3.new(0, humanoidRootPart.Velocity.Y, 0)
+            end
+        end
+    end)
+end
+
+local function disableTPWalk()
+    if TPWalkConnection then
+        TPWalkConnection:Disconnect()
+        TPWalkConnection = nil
+    end
+    
+    -- 元の歩行速度を復元
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = OriginalWalkSpeed
+        end
+    end
+end
+
+local function toggleTPWalk(state)
+    UtilityConfig.TPWalk = state
+    
+    if state then
+        enableTPWalk()
+        OrionLib:MakeNotification({
+            Name = "TPWalk",
+            Content = "TPWalkを有効化しました (速度: " .. UtilityConfig.TPWalkSpeed .. ") スマホ対応",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    else
+        disableTPWalk()
+        OrionLib:MakeNotification({
+            Name = "TPWalk",
+            Content = "TPWalkを無効化しました",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    end
+end
+
+-- ====================================================================
+-- ESP機能
+-- ====================================================================
+local function enableESP()
+    if ESPConnection then
+        ESPConnection:Disconnect()
+        ESPConnection = nil
+    end
+    
+    -- 既存のESPラベルをクリア
+    for _, label in pairs(ESPLabels) do
+        if label then
+            label:Destroy()
+        end
+    end
+    ESPLabels = {}
+    
+    -- ESPを有効化
+    ESPConnection = RunService.RenderStepped:Connect(function()
+        if not UtilityConfig.ESP then
+            return
+        end
+        
+        -- 全てのプレイヤーを処理
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local humanoidRootPart = player.Character:FindFirstChild("HumanoidRootPart")
+                
+                if humanoidRootPart then
+                    -- ラベルが存在しない場合は作成
+                    if not ESPLabels[player] then
+                        local label = Instance.new("BillboardGui")
+                        label.Name = "ESP_" .. player.Name
+                        label.Adornee = humanoidRootPart
+                        label.AlwaysOnTop = true
+                        label.Size = UDim2.new(0, 200, 0, 50)
+                        label.StudsOffset = Vector3.new(0, 3, 0)
+                        
+                        local textLabel = Instance.new("TextLabel")
+                        textLabel.Size = UDim2.new(1, 0, 1, 0)
+                        textLabel.BackgroundTransparency = 1
+                        textLabel.Text = player.Name
+                        textLabel.TextColor3 = Color3.new(1, 1, 1)
+                        textLabel.TextStrokeTransparency = 0
+                        textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+                        textLabel.Font = Enum.Font.SourceSansBold
+                        textLabel.TextSize = 20
+                        textLabel.Parent = label
+                        
+                        label.Parent = humanoidRootPart
+                        ESPLabels[player] = label
+                    end
+                    
+                    -- 距離を計算して表示
+                    local distance = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+                        and (humanoidRootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                        or 0
+                    
+                    local label = ESPLabels[player]
+                    if label and label:FindFirstChildOfClass("TextLabel") then
+                        label:FindFirstChildOfClass("TextLabel").Text = string.format("%s\n[%.1f studs]", player.Name, distance)
+                    end
+                end
+            end
+        end
+        
+        -- 削除されたプレイヤーのラベルをクリーンアップ
+        for player, label in pairs(ESPLabels) do
+            if not Players:FindFirstChild(player.Name) then
+                label:Destroy()
+                ESPLabels[player] = nil
+            end
+        end
+    end)
+end
+
+local function disableESP()
+    if ESPConnection then
+        ESPConnection:Disconnect()
+        ESPConnection = nil
+    end
+    
+    -- ESPラベルを全て削除
+    for _, label in pairs(ESPLabels) do
+        if label then
+            label:Destroy()
+        end
+    end
+    ESPLabels = {}
+end
+
+local function toggleESP(state)
+    UtilityConfig.ESP = state
+    
+    if state then
+        enableESP()
+        OrionLib:MakeNotification({
+            Name = "ESP",
+            Content = "ESPを有効化しました (プレイヤー名表示)",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    else
+        disableESP()
+        OrionLib:MakeNotification({
+            Name = "ESP",
+            Content = "ESPを無効化しました",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    end
+end
+
+-- ====================================================================
+-- FOV機能
+-- ====================================================================
+local function updateFOV()
+    if Camera then
+        Camera.FieldOfView = UtilityConfig.FOV
+    end
+end
+
+local function resetFOV()
+    if Camera then
+        Camera.FieldOfView = UtilityConfig.OriginalFOV
+        UtilityConfig.FOV = UtilityConfig.OriginalFOV
+    end
+end
+
+-- ====================================================================
+-- 羽（Feather）機能専用関数 - 左右対称化版
 -- ====================================================================
 local function createFeatherRowPoints(count)
     local points = {}
     
     if count == 0 then return points end
     
-    local totalWidth = (count - 1) * FeatherConfig.spacing
-    local startX = -totalWidth / 2
+    local halfCount = math.floor(count / 2)
+    local isOdd = count % 2 == 1
     
+    -- 左右対称になるように配置
     for i = 1, count do
-        local x = startX + (i - 1) * FeatherConfig.spacing
+        local x
+        if isOdd then
+            -- 奇数個の場合：中央から左右対称に配置
+            x = (i - math.ceil(count / 2)) * FeatherConfig.spacing
+        else
+            -- 偶数個の場合：中央の両側に対称に配置
+            x = (i - halfCount - 0.5) * FeatherConfig.spacing
+        end
+        
         local part = Instance.new("Part")
         part.CanCollide = false
         part.Anchored = true
@@ -406,7 +752,7 @@ local function assignFeatherToysToPoints()
     
     for i = 1, math.min(#FeatherToys, #FeatherRowPoints) do
         local toy = FeatherToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -426,7 +772,8 @@ local function assignFeatherToysToPoints()
                     Model = toy,
                     RowIndex = i,
                     offsetX = FeatherRowPoints[i].offsetX,
-                    distanceRank = FeatherRowPoints[i].distanceRank
+                    distanceRank = FeatherRowPoints[i].distanceRank,
+                    isLeft = FeatherRowPoints[i].offsetX < 0,  -- 左側かどうか
                 }  
                 
                 FeatherRowPoints[i].assignedToy = toyTable
@@ -477,8 +824,20 @@ local function startFeatherLoop()
                 
                 local targetPosition = basePosition + (rightVector * toy.offsetX)
                 
+                -- 左右対称の動き
                 local amplitude = FeatherConfig.baseAmplitude * toy.distanceRank
                 local waveMovement = math.sin(FeatherTime) * amplitude
+                
+                -- 左右対称に動かす
+                if FeatherConfig.symmetryMode then
+                    -- 左側と右側で逆相関の動き
+                    if toy.isLeft then
+                        waveMovement = math.sin(FeatherTime) * amplitude
+                    else
+                        waveMovement = math.cos(FeatherTime) * amplitude
+                    end
+                end
+                
                 local finalPosition = targetPosition + Vector3.new(0, waveMovement, 0)
                 
                 if point.part then
@@ -490,7 +849,14 @@ local function startFeatherLoop()
                 -- プレイヤーの背中側を向くように修正
                 local backYRotation = math.atan2(-lookVector.X, -lookVector.Z)
                 local baseCFrame = CFrame.new(finalPosition) * CFrame.Angles(0, backYRotation, 0)
-                local tiltedCFrame = baseCFrame * CFrame.Angles(math.rad(-FeatherConfig.tiltAngle), 0, 0)
+                
+                -- 左右対称の傾き
+                local tiltAngle = FeatherConfig.tiltAngle
+                if FeatherConfig.symmetryMode and toy.isLeft then
+                    tiltAngle = -tiltAngle  -- 左側は反対方向に傾ける
+                end
+                
+                local tiltedCFrame = baseCFrame * CFrame.Angles(math.rad(-tiltAngle), 0, 0)
                 
                 local currentCFrame = toy.BG.CFrame
                 local interpolatedCFrame = currentCFrame:Lerp(tiltedCFrame, 0.3)
@@ -548,21 +914,21 @@ local function toggleFeather(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
         end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+        end
         
-        FeatherToys = findFireworkSparklers()
+        FeatherToys = findObjects()
         FeatherRowPoints = createFeatherRowPoints(math.min(#FeatherToys, FeatherConfig.maxSparklers))
         FeatherAssignedToys = assignFeatherToysToPoints()
         startFeatherLoop()
         
         OrionLib:MakeNotification({
             Name = "羽[Feather]起動",
-            Content = "花火数: " .. #FeatherAssignedToys .. "本 (背中側)",
+            Content = "オブジェクト数: " .. #FeatherAssignedToys .. " (背中側・左右対称)",
             Image = "rbxassetid://4483362458",
             Time = 3
         })
@@ -651,7 +1017,7 @@ local function rescanRing()
     for _, d in ipairs(workspace:GetDescendants()) do
         if foundCount >= RingConfig.ObjectCount then break end
         
-        if d:IsA("Model") and d.Name == "FireworkSparkler" then
+        if d:IsA("Model") and d.Name == ObjectIDConfig.CurrentObjectID then
             local part = getPrimaryPart(d)
             if part and not part.Anchored then
                 local rec = { model = d, part = part }
@@ -762,11 +1128,11 @@ local function toggleRingAura(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
+        end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
         end
         
         rescanRing()
@@ -881,7 +1247,7 @@ local function assignHeartToysToPoints()
     
     for i = 1, math.min(#HeartToys, #HeartPoints) do
         local toy = HeartToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -1026,14 +1392,14 @@ local function toggleHeart(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
         end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+        end
         
-        HeartToys = findFireworkSparklers()
+        HeartToys = findObjects()
         HeartPoints = createHeartPoints(math.min(#HeartToys, HeartConfig.ObjectCount))
         HeartAssignedToys = assignHeartToysToPoints()
         startHeartLoop()
@@ -1090,7 +1456,7 @@ local function assignBigHeartToysToPoints()
     
     for i = 1, math.min(#BigHeartToys, #BigHeartPoints) do
         local toy = BigHeartToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -1241,14 +1607,14 @@ local function toggleBigHeart(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
         end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+        end
         
-        BigHeartToys = findFireworkSparklers()
+        BigHeartToys = findObjects()
         BigHeartPoints = createBigHeartPoints(math.min(#BigHeartToys, BigHeartConfig.ObjectCount))
         BigHeartAssignedToys = assignBigHeartToysToPoints()
         startBigHeartLoop()
@@ -1358,7 +1724,7 @@ local function assignStarOfDavidToysToPoints()
     
     for i = 1, math.min(#StarOfDavidToys, #StarOfDavidPoints) do
         local toy = StarOfDavidToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -1503,14 +1869,14 @@ local function toggleStarOfDavid(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
         end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+        end
         
-        StarOfDavidToys = findFireworkSparklers()
+        StarOfDavidToys = findObjects()
         StarOfDavidPoints = createStarOfDavidPoints(math.min(#StarOfDavidToys, StarOfDavidConfig.ObjectCount))
         StarOfDavidAssignedToys = assignStarOfDavidToysToPoints()
         startStarOfDavidLoop()
@@ -1622,7 +1988,7 @@ local function assignStarToysToPoints()
     
     for i = 1, math.min(#StarToys, #StarPoints) do
         local toy = StarToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -1766,14 +2132,14 @@ local function toggleStar(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
         end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+        end
         
-        StarToys = findFireworkSparklers()
+        StarToys = findObjects()
         StarPoints = createStarPoints(math.min(#StarToys, StarConfig.ObjectCount))
         StarAssignedToys = assignStarToysToPoints()
         startStarLoop()
@@ -1898,7 +2264,7 @@ local function assignSuperRingToysToPoints()
     
     for i = 1, math.min(#SuperRingToys, #SuperRingPoints) do
         local toy = SuperRingToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -2046,14 +2412,14 @@ local function toggleSuperRing(state)
         if StarConfig.Enabled then
             toggleStar(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-        end
         if Star2Config.Enabled then
             toggleStar2(false)
         end
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+        end
         
-        SuperRingToys = findFireworkSparklers()
+        SuperRingToys = findObjects()
         SuperRingPoints = createSuperRingPoints(math.min(#SuperRingToys, SuperRingConfig.ObjectCount))
         SuperRingAssignedToys = assignSuperRingToysToPoints()
         startSuperRingLoop()
@@ -2076,307 +2442,7 @@ local function toggleSuperRing(state)
 end
 
 -- ====================================================================
--- 卍マンジ配置機能専用関数（追加）
--- ====================================================================
-local function createManjiPoints(count)
-    local points = {}
-    
-    if count == 0 then return points end
-    
-    for i = 1, count do
-        -- 卍の形に沿った角度を計算
-        local t = (i - 1) * (2 * math.pi / count)
-        
-        -- 参考点用パート
-        local part = Instance.new("Part")
-        part.CanCollide = false
-        part.Anchored = true
-        part.Transparency = 1
-        part.Size = Vector3.new(4, 1, 4)
-        part.Parent = workspace
-        
-        points[i] = {
-            angle = t,
-            part = part,
-            assignedToy = nil,
-        }
-    end
-    
-    return points
-end
-
-local function getManjiPosition(t, size, pulse, armLength, armThickness)
-    -- 卍の形を計算する関数
-    -- 基本的な円形に、4つの腕を追加
-    
-    local scale = size / 10
-    
-    -- 基本の円形位置
-    local baseX = math.cos(t) * scale
-    local baseZ = math.sin(t) * scale
-    
-    -- 卍の腕の位置を計算
-    -- 4つの角度に腕を追加
-    local armAngle1 = 0  -- 右
-    local armAngle2 = math.pi / 2  -- 上
-    local armAngle3 = math.pi  -- 左
-    local armAngle4 = 3 * math.pi / 2  -- 下
-    
-    -- 現在の角度に最も近い腕を探す
-    local closestArm = armAngle1
-    local minDiff = math.abs(t - armAngle1)
-    
-    for _, arm in ipairs({armAngle2, armAngle3, armAngle4}) do
-        local diff = math.abs(t - arm)
-        if diff < minDiff then
-            minDiff = diff
-            closestArm = arm
-        end
-    end
-    
-    -- 腕の位置を計算
-    local armFactor = 0
-    if minDiff < (math.pi / 8) then  -- 腕の角度付近
-        armFactor = (1 - (minDiff / (math.pi / 8))) * armLength
-        
-        -- 腕の幅方向の調整
-        local perpendicularAngle = closestArm + math.pi / 2
-        local perpX = math.cos(perpendicularAngle) * armThickness
-        local perpZ = math.sin(perpendicularAngle) * armThickness
-        
-        -- 基本位置に腕の位置を追加
-        baseX = baseX + math.cos(closestArm) * armFactor + perpX
-        baseZ = baseZ + math.sin(closestArm) * armFactor + perpZ
-    end
-    
-    -- 脈動効果
-    if pulse > 0 then
-        local pulseFactor = 1 + (pulse * 0.05)
-        baseX = baseX * pulseFactor
-        baseZ = baseZ * pulseFactor
-    end
-    
-    return baseX, baseZ
-end
-
-local function attachManjiPhysics(part)
-    if not part then return nil, nil end
-    
-    local existingBG = part:FindFirstChildOfClass("BodyGyro")
-    local existingBP = part:FindFirstChildOfClass("BodyPosition")
-    
-    if existingBG and existingBP then 
-        return existingBG, existingBP
-    end
-    
-    if existingBG then existingBG:Destroy() end
-    if existingBP then existingBP:Destroy() end
-    
-    local BP = Instance.new("BodyPosition")  
-    local BG = Instance.new("BodyGyro")  
-    
-    BP.P = 15000  
-    BP.D = 200  
-    BP.MaxForce = Vector3.new(1, 1, 1) * 1e10  
-    BP.Parent = part  
-    
-    BG.P = 15000  
-    BG.D = 200  
-    BG.MaxTorque = Vector3.new(1, 1, 1) * 1e10  
-    BG.Parent = part  
-    
-    return BG, BP
-end
-
-local function assignManjiToysToPoints()
-    ManjiAssignedToys = {}
-    
-    for i = 1, math.min(#ManjiToys, #ManjiPoints) do
-        local toy = ManjiToys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
-            local primaryPart = getPrimaryPart(toy)
-            
-            if primaryPart then  
-                for _, child in ipairs(toy:GetChildren()) do  
-                    if child:IsA("BasePart") then  
-                        child.CanCollide = false
-                        child.CanTouch = false
-                        child.Anchored = false
-                    end  
-                end
-                
-                local BG, BP = attachManjiPhysics(primaryPart)  
-                local toyTable = {  
-                    BG = BG,  
-                    BP = BP,  
-                    Pallet = primaryPart,
-                    Model = toy,
-                    PointIndex = i,
-                    baseAngle = ManjiPoints[i].angle,
-                }  
-                
-                ManjiPoints[i].assignedToy = toyTable
-                table.insert(ManjiAssignedToys, toyTable)
-            end  
-        end
-    end
-    
-    return ManjiAssignedToys
-end
-
-local function startManjiLoop()
-    if ManjiLoopConn then
-        ManjiLoopConn:Disconnect()
-        ManjiLoopConn = nil
-    end
-    
-    ManjiTime = 0
-    
-    ManjiLoopConn = RunService.RenderStepped:Connect(function(dt)
-        if not ManjiConfig.Enabled or not LocalPlayer.Character then
-            return
-        end
-        
-        local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local torso = LocalPlayer.Character:FindFirstChild("Torso") or LocalPlayer.Character:FindFirstChild("UpperTorso")
-        
-        if not humanoidRootPart or not torso then
-            return
-        end
-        
-        ManjiTime += dt
-        
-        local basePosition
-        if ManjiConfig.FollowPlayer then
-            basePosition = torso.Position
-        else
-            basePosition = torso.Position
-        end
-        
-        -- 脈動効果の計算
-        local pulseEffect = 0
-        if ManjiConfig.PulseSpeed > 0 then
-            pulseEffect = math.sin(ManjiTime * ManjiConfig.PulseSpeed) * ManjiConfig.PulseAmplitude
-        end
-        
-        for i, point in ipairs(ManjiPoints) do
-            if point.assignedToy and point.assignedToy.BP and point.assignedToy.BG then
-                local toy = point.assignedToy
-                
-                -- 回転角度を計算（時間経過で回転）
-                local currentAngle = toy.baseAngle + (ManjiTime * ManjiConfig.RotationSpeed)
-                
-                -- 卍の形の位置を計算
-                local x, z = getManjiPosition(
-                    currentAngle, 
-                    ManjiConfig.Size, 
-                    pulseEffect,
-                    ManjiConfig.ArmLength,
-                    ManjiConfig.ArmThickness
-                )
-                
-                -- 高さ調整
-                local heightOffset = ManjiConfig.Height + (math.sin(currentAngle * 2) * 0.3)
-                
-                -- 最終的な位置
-                local localPos = Vector3.new(x, heightOffset, z)
-                local targetPosition = basePosition + localPos
-                
-                if point.part then
-                    point.part.Position = targetPosition
-                end
-                
-                toy.BP.Position = targetPosition
-                
-                -- 外側を向く
-                local direction = (targetPosition - basePosition).Unit
-                if direction.Magnitude > 0 then
-                    local lookCFrame = CFrame.lookAt(targetPosition, targetPosition + direction)
-                    toy.BG.CFrame = lookCFrame
-                end
-            end
-        end
-    end)
-end
-
-local function stopManjiLoop()
-    if ManjiLoopConn then
-        ManjiLoopConn:Disconnect()
-        ManjiLoopConn = nil
-    end
-    
-    -- 物理演算をクリーンアップ
-    for _, point in ipairs(ManjiPoints) do
-        if point.part then
-            point.part:Destroy()
-        end
-        if point.assignedToy then
-            if point.assignedToy.BG then
-                point.assignedToy.BG:Destroy()
-            end
-            if point.assignedToy.BP then
-                point.assignedToy.BP:Destroy()
-            end
-        end
-    end
-    
-    ManjiPoints = {}
-    ManjiAssignedToys = {}
-end
-
-local function toggleManji(state)
-    ManjiConfig.Enabled = state
-    if state then
-        -- 他の機能を停止（同時に両方は動作しない）
-        if FeatherConfig.Enabled then
-            toggleFeather(false)
-        end
-        if RingConfig.Enabled then
-            toggleRingAura(false)
-        end
-        if HeartConfig.Enabled then
-            toggleHeart(false)
-        end
-        if BigHeartConfig.Enabled then
-            toggleBigHeart(false)
-        end
-        if StarOfDavidConfig.Enabled then
-            toggleStarOfDavid(false)
-        end
-        if StarConfig.Enabled then
-            toggleStar(false)
-        end
-        if SuperRingConfig.Enabled then
-            toggleSuperRing(false)
-        end
-        if Star2Config.Enabled then
-            toggleStar2(false)
-        end
-        
-        ManjiToys = findFireworkSparklers()
-        ManjiPoints = createManjiPoints(math.min(#ManjiToys, ManjiConfig.ObjectCount))
-        ManjiAssignedToys = assignManjiToysToPoints()
-        startManjiLoop()
-        
-        OrionLib:MakeNotification({
-            Name = "卍マンジ起動",
-            Content = "サイズ: " .. ManjiConfig.Size .. ", 高さ: " .. ManjiConfig.Height .. ", 数: " .. ManjiConfig.ObjectCount,
-            Image = "rbxassetid://4483362458",
-            Time = 3
-        })
-    else
-        stopManjiLoop()
-        OrionLib:MakeNotification({
-            Name = "卍マンジ停止",
-            Content = "卍形配置を解除しました",
-            Image = "rbxassetid://4483362458",
-            Time = 2
-        })
-    end
-end
-
--- ====================================================================
--- スター2✫配置機能専用関数（追加 - 太陽のようなギザギザ模様）
+-- スター2✫配置機能専用関数（修正版 - 広がりすぎ問題修正）
 -- ====================================================================
 local function createStar2Points(count)
     local points = {}
@@ -2406,7 +2472,7 @@ local function createStar2Points(count)
     return points
 end
 
-local function getStar2Position(t, size, pulse, rayLength, rayIndex, time, jitterSpeed, jitterAmount)
+local function getStar2Position(t, size, pulse, rayLength, rayIndex, time, jitterSpeed, jitterAmount, maxDistance)
     -- 太陽のようなギザギザ模様を計算
     local scale = size / 10
     
@@ -2440,8 +2506,13 @@ local function getStar2Position(t, size, pulse, rayLength, rayIndex, time, jitte
         pulseFactor = 1 + (pulse * 0.1)
     end
     
-    -- 最終的な半径
+    -- 最終的な半径（最大距離制限を追加）
     local finalRadius = (baseRadius + rayFactor) * pulseFactor
+    
+    -- 最大距離制限を適用（広がりすぎ防止）
+    if maxDistance and finalRadius > maxDistance then
+        finalRadius = maxDistance
+    end
     
     -- 位置を計算
     local x = math.cos(t) * finalRadius
@@ -2484,7 +2555,7 @@ local function assignStar2ToysToPoints()
     
     for i = 1, math.min(#Star2Toys, #Star2Points) do
         local toy = Star2Toys[i]
-        if toy and toy:IsA("Model") and toy.Name == "FireworkSparkler" then
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
             local primaryPart = getPrimaryPart(toy)
             
             if primaryPart then  
@@ -2558,7 +2629,7 @@ local function startStar2Loop()
                 -- 高速回転角度を計算
                 local currentAngle = toy.baseAngle + (Star2Time * Star2Config.RotationSpeed)
                 
-                -- スター2（太陽）の位置を計算
+                -- スター2（太陽）の位置を計算（最大距離制限を追加）
                 local x, z, radius = getStar2Position(
                     currentAngle, 
                     Star2Config.Size, 
@@ -2567,7 +2638,8 @@ local function startStar2Loop()
                     toy.rayIndex,
                     Star2Time,
                     Star2Config.JitterSpeed,
-                    Star2Config.JitterAmount
+                    Star2Config.JitterAmount,
+                    Star2Config.MaxDistance  -- 広がりすぎ防止
                 )
                 
                 -- 高さ調整（揺れ効果）
@@ -2648,11 +2720,11 @@ local function toggleStar2(state)
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
         end
-        if ManjiConfig.Enabled then
-            toggleManji(false)
+        if SphereConfig.Enabled then
+            toggleSphere(false)
         end
         
-        Star2Toys = findFireworkSparklers()
+        Star2Toys = findObjects()
         Star2Points = createStar2Points(math.min(#Star2Toys, Star2Config.ObjectCount))
         Star2AssignedToys = assignStar2ToysToPoints()
         startStar2Loop()
@@ -2675,7 +2747,297 @@ local function toggleStar2(state)
 end
 
 -- ====================================================================
--- 便利機能 (Mi(=^・^=))
+-- 球体◯配置機能専用関数 - 竜巻の仕組みを利用して立体球体
+-- ====================================================================
+local function createSpherePoints(count)
+    local points = {}
+    
+    if count == 0 then return points end
+    
+    -- 球体のための緯度と経度を計算
+    local latitudes = SphereConfig.Latitudes
+    local longitudes = SphereConfig.Longitudes
+    
+    for i = 1, count do
+        -- 球体上の位置を計算
+        local latIndex = math.floor((i - 1) / longitudes) + 1
+        local lonIndex = ((i - 1) % longitudes) + 1
+        
+        -- 参考点用パート
+        local part = Instance.new("Part")
+        part.CanCollide = false
+        part.Anchored = true
+        part.Transparency = 1
+        part.Size = Vector3.new(4, 1, 4)
+        part.Parent = workspace
+        
+        points[i] = {
+            latitudeIndex = latIndex,
+            longitudeIndex = lonIndex,
+            part = part,
+            assignedToy = nil,
+        }
+    end
+    
+    return points
+end
+
+local function getSpherePosition(latIndex, lonIndex, totalLats, totalLons, radius, time, 
+                                 horRotationSpeed, verRotationSpeed, pulseSpeed, pulseAmplitude,
+                                 waveSpeed, waveAmplitude)
+    
+    -- 緯度角度（-90°から90°）
+    local latAngle = ((latIndex - 1) / (totalLats - 1) - 0.5) * math.pi
+    
+    -- 経度角度（0°から360°）
+    local lonAngle = ((lonIndex - 1) / totalLons) * 2 * math.pi
+    
+    -- 時間経過による回転
+    local rotatedLon = lonAngle + (time * horRotationSpeed)
+    local rotatedLat = latAngle + (time * verRotationSpeed * 0.5)
+    
+    -- 脈動効果
+    local pulse = 1
+    if pulseSpeed > 0 then
+        pulse = 1 + math.sin(time * pulseSpeed) * pulseAmplitude
+    end
+    
+    -- 波の効果
+    local wave = 1
+    if waveSpeed > 0 then
+        wave = 1 + math.sin(time * waveSpeed + lonIndex * 0.5) * waveAmplitude
+    end
+    
+    -- 最終的な半径
+    local finalRadius = radius * pulse * wave
+    
+    -- 球体上の位置を計算
+    local x = finalRadius * math.cos(rotatedLat) * math.cos(rotatedLon)
+    local y = finalRadius * math.sin(rotatedLat)
+    local z = finalRadius * math.cos(rotatedLat) * math.sin(rotatedLon)
+    
+    return x, y, z, finalRadius
+end
+
+local function attachSpherePhysics(part)
+    if not part then return nil, nil end
+    
+    local existingBG = part:FindFirstChildOfClass("BodyGyro")
+    local existingBP = part:FindFirstChildOfClass("BodyPosition")
+    
+    if existingBG and existingBP then 
+        return existingBG, existingBP
+    end
+    
+    if existingBG then existingBG:Destroy() end
+    if existingBP then existingBP:Destroy() end
+    
+    local BP = Instance.new("BodyPosition")  
+    local BG = Instance.new("BodyGyro")  
+    
+    BP.P = 20000  
+    BP.D = 300  
+    BP.MaxForce = Vector3.new(1, 1, 1) * 1.5e10  
+    BP.Parent = part  
+    
+    BG.P = 20000  
+    BG.D = 300  
+    BG.MaxTorque = Vector3.new(1, 1, 1) * 1.5e10  
+    BG.Parent = part  
+    
+    return BG, BP
+end
+
+local function assignSphereToysToPoints()
+    SphereAssignedToys = {}
+    
+    for i = 1, math.min(#SphereToys, #SpherePoints) do
+        local toy = SphereToys[i]
+        if toy and toy:IsA("Model") and toy.Name == ObjectIDConfig.CurrentObjectID then
+            local primaryPart = getPrimaryPart(toy)
+            
+            if primaryPart then  
+                for _, child in ipairs(toy:GetChildren()) do  
+                    if child:IsA("BasePart") then  
+                        child.CanCollide = false
+                        child.CanTouch = false
+                        child.Anchored = false
+                    end  
+                end
+                
+                local BG, BP = attachSpherePhysics(primaryPart)  
+                local toyTable = {  
+                    BG = BG,  
+                    BP = BP,  
+                    Pallet = primaryPart,
+                    Model = toy,
+                    PointIndex = i,
+                    latitudeIndex = SpherePoints[i].latitudeIndex,
+                    longitudeIndex = SpherePoints[i].longitudeIndex,
+                }  
+                
+                SpherePoints[i].assignedToy = toyTable
+                table.insert(SphereAssignedToys, toyTable)
+            end  
+        end
+    end
+    
+    return SphereAssignedToys
+end
+
+local function startSphereLoop()
+    if SphereLoopConn then
+        SphereLoopConn:Disconnect()
+        SphereLoopConn = nil
+    end
+    
+    SphereTime = 0
+    
+    SphereLoopConn = RunService.RenderStepped:Connect(function(dt)
+        if not SphereConfig.Enabled or not LocalPlayer.Character then
+            return
+        end
+        
+        local humanoidRootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local torso = LocalPlayer.Character:FindFirstChild("Torso") or LocalPlayer.Character:FindFirstChild("UpperTorso")
+        
+        if not humanoidRootPart or not torso then
+            return
+        end
+        
+        SphereTime += dt
+        
+        local basePosition
+        if SphereConfig.FollowPlayer then
+            basePosition = torso.Position
+        else
+            basePosition = torso.Position
+        end
+        
+        for i, point in ipairs(SpherePoints) do
+            if point.assignedToy and point.assignedToy.BP and point.assignedToy.BG then
+                local toy = point.assignedToy
+                
+                -- 球体上の位置を計算
+                local x, y, z, radius = getSpherePosition(
+                    toy.latitudeIndex, 
+                    toy.longitudeIndex,
+                    SphereConfig.Latitudes,
+                    SphereConfig.Longitudes,
+                    SphereConfig.Radius,
+                    SphereTime,
+                    SphereConfig.HorizontalRotationSpeed,
+                    SphereConfig.VerticalRotationSpeed,
+                    SphereConfig.PulseSpeed,
+                    SphereConfig.PulseAmplitude,
+                    SphereConfig.WaveSpeed,
+                    SphereConfig.WaveAmplitude
+                )
+                
+                -- 基本高さを追加
+                local finalHeight = SphereConfig.BaseHeight + y
+                
+                -- 最終的な位置
+                local localPos = Vector3.new(x, finalHeight, z)
+                local targetPosition = basePosition + localPos
+                
+                if point.part then
+                    point.part.Position = targetPosition
+                end
+                
+                toy.BP.Position = targetPosition
+                
+                -- 球体の外側を向く（中心から外側）
+                local direction = (targetPosition - basePosition).Unit
+                if direction.Magnitude > 0 then
+                    local currentCFrame = toy.BG.CFrame
+                    local targetCFrame = CFrame.lookAt(targetPosition, targetPosition + direction)
+                    local interpolatedCFrame = currentCFrame:Lerp(targetCFrame, 0.4)
+                    toy.BG.CFrame = interpolatedCFrame
+                end
+            end
+        end
+    end)
+end
+
+local function stopSphereLoop()
+    if SphereLoopConn then
+        SphereLoopConn:Disconnect()
+        SphereLoopConn = nil
+    end
+    
+    -- 物理演算をクリーンアップ
+    for _, point in ipairs(SpherePoints) do
+        if point.part then
+            point.part:Destroy()
+        end
+        if point.assignedToy then
+            if point.assignedToy.BG then
+                point.assignedToy.BG:Destroy()
+            end
+            if point.assignedToy.BP then
+                point.assignedToy.BP:Destroy()
+            end
+        end
+    end
+    
+    SpherePoints = {}
+    SphereAssignedToys = {}
+end
+
+local function toggleSphere(state)
+    SphereConfig.Enabled = state
+    if state then
+        -- 他の機能を停止（同時に両方は動作しない）
+        if FeatherConfig.Enabled then
+            toggleFeather(false)
+        end
+        if RingConfig.Enabled then
+            toggleRingAura(false)
+        end
+        if HeartConfig.Enabled then
+            toggleHeart(false)
+        end
+        if BigHeartConfig.Enabled then
+            toggleBigHeart(false)
+        end
+        if StarOfDavidConfig.Enabled then
+            toggleStarOfDavid(false)
+        end
+        if StarConfig.Enabled then
+            toggleStar(false)
+        end
+        if SuperRingConfig.Enabled then
+            toggleSuperRing(false)
+        end
+        if Star2Config.Enabled then
+            toggleStar2(false)
+        end
+        
+        SphereToys = findObjects()
+        SpherePoints = createSpherePoints(math.min(#SphereToys, SphereConfig.ObjectCount))
+        SphereAssignedToys = assignSphereToysToPoints()
+        startSphereLoop()
+        
+        OrionLib:MakeNotification({
+            Name = "球体◯起動",
+            Content = "半径: " .. SphereConfig.Radius .. ", 緯線: " .. SphereConfig.Latitudes .. ", 経線: " .. SphereConfig.Longitudes .. ", 数: " .. SphereConfig.ObjectCount,
+            Image = "rbxassetid://4483362458",
+            Time = 3
+        })
+    else
+        stopSphereLoop()
+        OrionLib:MakeNotification({
+            Name = "球体◯停止",
+            Content = "球体配置を解除しました",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    end
+end
+
+-- ====================================================================
+-- 便利機能
 -- ====================================================================
 local function toggleInfiniteJump(state)
     UtilityConfig.InfiniteJump = state
@@ -2746,6 +3108,43 @@ local Window = OrionLib:MakeWindow({
 })
 
 -- ====================================================================
+-- タブ0: オブジェクトID設定
+-- ====================================================================
+local ObjectIDTab = Window:MakeTab({
+    Name = "オブジェクト設定",
+    Icon = "rbxassetid://4483362458",
+    PremiumOnly = false
+})
+
+local ObjectIDSection = ObjectIDTab:AddSection({
+    Name = "オブジェクトID切り替え"
+})
+
+-- オブジェクトID切り替えボタン
+for _, objectID in ipairs(ObjectIDConfig.AvailableObjects) do
+    ObjectIDTab:AddButton({
+        Name = objectID .. " を使用",
+        Callback = function()
+            changeObjectID(objectID)
+        end
+    })
+end
+
+ObjectIDTab:AddLabel("現在のオブジェクトID: " .. ObjectIDConfig.CurrentObjectID)
+
+ObjectIDTab:AddButton({
+    Name = "オブジェクトを再検出",
+    Callback = function()
+        OrionLib:MakeNotification({
+            Name = "再検出",
+            Content = "オブジェクトを再検出しました",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    end
+})
+
+-- ====================================================================
 -- タブ1: 羽[Feather]
 -- ====================================================================
 local MainTab = Window:MakeTab({
@@ -2756,10 +3155,23 @@ local MainTab = Window:MakeTab({
 
 -- 羽のON/OFFトグル
 MainTab:AddToggle({
-    Name = "羽を起動 (背中側)",
+    Name = "羽を起動 (背中側・左右対称)",
     Default = false,
     Callback = function(Value)
         toggleFeather(Value)
+    end
+})
+
+MainTab:AddToggle({
+    Name = "左右対称モード",
+    Default = FeatherConfig.symmetryMode,
+    Callback = function(Value)
+        FeatherConfig.symmetryMode = Value
+        if FeatherConfig.Enabled then
+            toggleFeather(false)
+            task.wait(0.1)
+            toggleFeather(true)
+        end
     end
 })
 
@@ -2768,13 +3180,13 @@ local FeatherSection1 = MainTab:AddSection({
 })
 
 MainTab:AddSlider({
-    Name = "最大花火数",
+    Name = "最大オブジェクト数",
     Min = 2,
     Max = 40,
     Default = FeatherConfig.maxSparklers,
     Color = Theme.SliderColor,
     Increment = 2,
-    ValueName = "本",
+    ValueName = "個",
     Callback = function(Value)
         FeatherConfig.maxSparklers = Value
         if FeatherConfig.Enabled then
@@ -2786,7 +3198,7 @@ MainTab:AddSlider({
 })
 
 MainTab:AddSlider({
-    Name = "花火の間隔",
+    Name = "オブジェクトの間隔",
     Min = 1,
     Max = 10,
     Default = FeatherConfig.spacing,
@@ -2834,7 +3246,7 @@ local FeatherSection2 = MainTab:AddSection({
 })
 
 MainTab:AddSlider({
-    Name = "花火の傾き角度",
+    Name = "オブジェクトの傾き角度",
     Min = 0,
     Max = 90,
     Default = FeatherConfig.tiltAngle,
@@ -2864,7 +3276,7 @@ MainTab:AddSlider({
 })
 
 MainTab:AddSlider({
-    Name = "基本振幅（最も近い花火）",
+    Name = "基本振幅（最も近いオブジェクト）",
     Min = 0,
     Max = 5,
     Default = FeatherConfig.baseAmplitude,
@@ -2881,7 +3293,7 @@ local FeatherSection4 = MainTab:AddSection({
 })
 
 MainTab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if FeatherConfig.Enabled then
             toggleFeather(false)
@@ -2889,7 +3301,7 @@ MainTab:AddButton({
             toggleFeather(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -2945,7 +3357,7 @@ RingTab:AddSlider({
 })
 
 RingTab:AddSlider({
-    Name = "花火の数",
+    Name = "オブジェクトの数",
     Min = 3,
     Max = 20,
     Default = RingConfig.ObjectCount,
@@ -2974,6 +3386,26 @@ RingTab:AddSlider({
     ValueName = "速度",
     Callback = function(Value)
         RingConfig.RotationSpeed = Value
+    end
+})
+
+-- 魔法陣の再検出ボタンを追加
+local RingSection3 = RingTab:AddSection({
+    Name = "制御"
+})
+
+RingTab:AddButton({
+    Name = "オブジェクトを再検出",
+    Callback = function()
+        if RingConfig.Enabled then
+            rescanRing()
+            OrionLib:MakeNotification({
+                Name = "再検出完了",
+                Content = "魔法陣オブジェクトを再検出しました",
+                Image = "rbxassetid://4483362458",
+                Time = 3
+            })
+        end
     end
 })
 
@@ -3037,7 +3469,7 @@ HeartTab:AddSlider({
 })
 
 HeartTab:AddSlider({
-    Name = "花火の数",
+    Name = "オブジェクトの数",
     Min = 6,
     Max = 24,
     Default = HeartConfig.ObjectCount,
@@ -3102,7 +3534,7 @@ local HeartSection4 = HeartTab:AddSection({
 })
 
 HeartTab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if HeartConfig.Enabled then
             toggleHeart(false)
@@ -3110,7 +3542,7 @@ HeartTab:AddButton({
             toggleHeart(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -3204,7 +3636,7 @@ BigHeartTab:AddSlider({
 })
 
 BigHeartTab:AddSlider({
-    Name = "花火の数（多い）",
+    Name = "オブジェクトの数（多い）",
     Min = 12,
     Max = 40,
     Default = BigHeartConfig.ObjectCount,
@@ -3269,7 +3701,7 @@ local BigHeartSection4 = BigHeartTab:AddSection({
 })
 
 BigHeartTab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if BigHeartConfig.Enabled then
             toggleBigHeart(false)
@@ -3277,7 +3709,7 @@ BigHeartTab:AddButton({
             toggleBigHeart(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -3358,7 +3790,7 @@ StarOfDavidTab:AddSlider({
 })
 
 StarOfDavidTab:AddSlider({
-    Name = "花火の数",
+    Name = "オブジェクトの数",
     Min = 6,
     Max = 24,
     Default = StarOfDavidConfig.ObjectCount,
@@ -3410,7 +3842,7 @@ local StarOfDavidSection4 = StarOfDavidTab:AddSection({
 })
 
 StarOfDavidTab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if StarOfDavidConfig.Enabled then
             toggleStarOfDavid(false)
@@ -3418,7 +3850,7 @@ StarOfDavidTab:AddButton({
             toggleStarOfDavid(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -3499,7 +3931,7 @@ StarTab:AddSlider({
 })
 
 StarTab:AddSlider({
-    Name = "花火の数",
+    Name = "オブジェクトの数",
     Min = 5,
     Max = 20,
     Default = StarConfig.ObjectCount,
@@ -3551,7 +3983,7 @@ local StarSection4 = StarTab:AddSection({
 })
 
 StarTab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if StarConfig.Enabled then
             toggleStar(false)
@@ -3559,7 +3991,7 @@ StarTab:AddButton({
             toggleStar(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -3653,7 +4085,7 @@ SuperRingTab:AddSlider({
 })
 
 SuperRingTab:AddSlider({
-    Name = "花火の数",
+    Name = "オブジェクトの数",
     Min = 8,
     Max = 32,
     Default = SuperRingConfig.ObjectCount,
@@ -3731,7 +4163,7 @@ local SuperRingSection4 = SuperRingTab:AddSection({
 })
 
 SuperRingTab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if SuperRingConfig.Enabled then
             toggleSuperRing(false)
@@ -3739,7 +4171,7 @@ SuperRingTab:AddButton({
             toggleSuperRing(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -3748,174 +4180,7 @@ SuperRingTab:AddButton({
 })
 
 -- ====================================================================
--- タブ8: 卍マンジ（追加）
--- ====================================================================
-local ManjiTab = Window:MakeTab({
-    Name = "卍マンジ",
-    Icon = "rbxassetid://4483362458",
-    PremiumOnly = false
-})
-
-local ManjiSection1 = ManjiTab:AddSection({
-    Name = "基本設定"
-})
-
-ManjiTab:AddToggle({
-    Name = "卍形を起動",
-    Default = false,
-    Callback = function(Value)
-        toggleManji(Value)
-    end
-})
-
-ManjiTab:AddToggle({
-    Name = "プレイヤー追従",
-    Default = ManjiConfig.FollowPlayer,
-    Callback = function(Value)
-        ManjiConfig.FollowPlayer = Value
-    end
-})
-
-local ManjiSection2 = ManjiTab:AddSection({
-    Name = "サイズ設定"
-})
-
-ManjiTab:AddSlider({
-    Name = "卍のサイズ",
-    Min = 3,
-    Max = 20,
-    Default = ManjiConfig.Size,
-    Color = Theme.SliderColor,
-    Increment = 1,
-    ValueName = "studs",
-    Callback = function(Value)
-        ManjiConfig.Size = Value
-    end
-})
-
-ManjiTab:AddSlider({
-    Name = "基本高さ",
-    Min = 0,
-    Max = 20,
-    Default = ManjiConfig.Height,
-    Color = Theme.SliderColor,
-    Increment = 0.5,
-    ValueName = "studs",
-    Callback = function(Value)
-        ManjiConfig.Height = Value
-    end
-})
-
-ManjiTab:AddSlider({
-    Name = "腕の長さ",
-    Min = 0.5,
-    Max = 4.0,
-    Default = ManjiConfig.ArmLength,
-    Color = Theme.SliderColor,
-    Increment = 0.1,
-    ValueName = "studs",
-    Callback = function(Value)
-        ManjiConfig.ArmLength = Value
-    end
-})
-
-ManjiTab:AddSlider({
-    Name = "腕の太さ",
-    Min = 0.1,
-    Max = 1.0,
-    Default = ManjiConfig.ArmThickness,
-    Color = Theme.SliderColor,
-    Increment = 0.05,
-    ValueName = "studs",
-    Callback = function(Value)
-        ManjiConfig.ArmThickness = Value
-    end
-})
-
-ManjiTab:AddSlider({
-    Name = "花火の数",
-    Min = 8,
-    Max = 32,
-    Default = ManjiConfig.ObjectCount,
-    Color = Theme.SliderColor,
-    Increment = 2,
-    ValueName = "個",
-    Callback = function(Value)
-        ManjiConfig.ObjectCount = Value
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-            task.wait(0.1)
-            toggleManji(true)
-        end
-    end
-})
-
-local ManjiSection3 = ManjiTab:AddSection({
-    Name = "動き設定（高速対応）"
-})
-
-ManjiTab:AddSlider({
-    Name = "回転速度（高速）",
-    Min = 0,
-    Max = ManjiConfig.RotationSpeedMax,
-    Default = ManjiConfig.RotationSpeed,
-    Color = Theme.SliderColor,
-    Increment = 0.5,
-    ValueName = "速度",
-    Callback = function(Value)
-        ManjiConfig.RotationSpeed = Value
-    end
-})
-
-ManjiTab:AddSlider({
-    Name = "脈動速度（高速）",
-    Min = 0,
-    Max = ManjiConfig.PulseSpeedMax,
-    Default = ManjiConfig.PulseSpeed,
-    Color = Theme.SliderColor,
-    Increment = 0.5,
-    ValueName = "速度",
-    Callback = function(Value)
-        ManjiConfig.PulseSpeed = Value
-    end
-})
-
-ManjiTab:AddSlider({
-    Name = "脈動振幅",
-    Min = 0,
-    Max = 2,
-    Default = ManjiConfig.PulseAmplitude,
-    Color = Theme.SliderColor,
-    Increment = 0.1,
-    ValueName = "studs",
-    Callback = function(Value)
-        ManjiConfig.PulseAmplitude = Value
-    end
-})
-
-local ManjiSection4 = ManjiTab:AddSection({
-    Name = "制御"
-})
-
-ManjiTab:AddButton({
-    Name = "花火を再検出",
-    Callback = function()
-        if ManjiConfig.Enabled then
-            toggleManji(false)
-            task.wait(0.1)
-            toggleManji(true)
-            OrionLib:MakeNotification({
-                Name = "再検出完了",
-                Content = "花火を再検出しました",
-                Image = "rbxassetid://4483362458",
-                Time = 3
-            })
-        end
-    end
-})
-
--- ====================================================================
--- タブ9: スター2✫（追加 - 太陽のようなギザギザ模様）
+-- タブ8: スター2✫（修正版 - 広がりすぎ防止）
 -- ====================================================================
 local Star2Tab = Window:MakeTab({
     Name = "スター2✫",
@@ -3957,6 +4222,19 @@ Star2Tab:AddSlider({
     ValueName = "studs",
     Callback = function(Value)
         Star2Config.Size = Value
+    end
+})
+
+Star2Tab:AddSlider({
+    Name = "最大距離制限（広がりすぎ防止）",
+    Min = 10,
+    Max = 100,
+    Default = Star2Config.MaxDistance,
+    Color = Theme.SliderColor,
+    Increment = 5,
+    ValueName = "studs",
+    Callback = function(Value)
+        Star2Config.MaxDistance = Value
     end
 })
 
@@ -4005,7 +4283,7 @@ Star2Tab:AddSlider({
 })
 
 Star2Tab:AddSlider({
-    Name = "花火の数（多い）",
+    Name = "オブジェクトの数（多い）",
     Min = 12,
     Max = 48,
     Default = Star2Config.ObjectCount,
@@ -4100,7 +4378,7 @@ local Star2Section5 = Star2Tab:AddSection({
 })
 
 Star2Tab:AddButton({
-    Name = "花火を再検出",
+    Name = "オブジェクトを再検出",
     Callback = function()
         if Star2Config.Enabled then
             toggleStar2(false)
@@ -4108,7 +4386,7 @@ Star2Tab:AddButton({
             toggleStar2(true)
             OrionLib:MakeNotification({
                 Name = "再検出完了",
-                Content = "花火を再検出しました",
+                Content = "オブジェクトを再検出しました",
                 Image = "rbxassetid://4483362458",
                 Time = 3
             })
@@ -4117,7 +4395,240 @@ Star2Tab:AddButton({
 })
 
 -- ====================================================================
--- タブ10: Mi(=^・^=)
+-- タブ9: 球体◯（竜巻の仕組みを利用して立体球体）
+-- ====================================================================
+local SphereTab = Window:MakeTab({
+    Name = "球体◯",
+    Icon = "rbxassetid://4483362458",
+    PremiumOnly = false
+})
+
+local SphereSection1 = SphereTab:AddSection({
+    Name = "基本設定"
+})
+
+SphereTab:AddToggle({
+    Name = "球体◯を起動",
+    Default = false,
+    Callback = function(Value)
+        toggleSphere(Value)
+    end
+})
+
+SphereTab:AddToggle({
+    Name = "プレイヤー追従",
+    Default = SphereConfig.FollowPlayer,
+    Callback = function(Value)
+        SphereConfig.FollowPlayer = Value
+    end
+})
+
+local SphereSection2 = SphereTab:AddSection({
+    Name = "サイズ設定"
+})
+
+SphereTab:AddSlider({
+    Name = "球体の半径",
+    Min = 2,
+    Max = 20,
+    Default = SphereConfig.Radius,
+    Color = Theme.SliderColor,
+    Increment = 0.5,
+    ValueName = "studs",
+    Callback = function(Value)
+        SphereConfig.Radius = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "基本高さ",
+    Min = -10,
+    Max = 10,
+    Default = SphereConfig.BaseHeight,
+    Color = Theme.SliderColor,
+    Increment = 0.5,
+    ValueName = "studs",
+    Callback = function(Value)
+        SphereConfig.BaseHeight = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "緯線の数",
+    Min = 2,
+    Max = 8,
+    Default = SphereConfig.Latitudes,
+    Color = Theme.SliderColor,
+    Increment = 1,
+    ValueName = "本",
+    Callback = function(Value)
+        SphereConfig.Latitudes = Value
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+            task.wait(0.1)
+            toggleSphere(true)
+        end
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "経線の数",
+    Min = 4,
+    Max = 16,
+    Default = SphereConfig.Longitudes,
+    Color = Theme.SliderColor,
+    Increment = 2,
+    ValueName = "本",
+    Callback = function(Value)
+        SphereConfig.Longitudes = Value
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+            task.wait(0.1)
+            toggleSphere(true)
+        end
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "オブジェクトの数",
+    Min = 8,
+    Max = 64,
+    Default = SphereConfig.ObjectCount,
+    Color = Theme.SliderColor,
+    Increment = 4,
+    ValueName = "個",
+    Callback = function(Value)
+        SphereConfig.ObjectCount = Value
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+            task.wait(0.1)
+            toggleSphere(true)
+        end
+    end
+})
+
+local SphereSection3 = SphereTab:AddSection({
+    Name = "回転設定"
+})
+
+SphereTab:AddSlider({
+    Name = "水平回転速度",
+    Min = 0,
+    Max = 5,
+    Default = SphereConfig.HorizontalRotationSpeed,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "速度",
+    Callback = function(Value)
+        SphereConfig.HorizontalRotationSpeed = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "垂直回転速度",
+    Min = 0,
+    Max = 3,
+    Default = SphereConfig.VerticalRotationSpeed,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "速度",
+    Callback = function(Value)
+        SphereConfig.VerticalRotationSpeed = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "らせん速度",
+    Min = 0,
+    Max = 3,
+    Default = SphereConfig.SpiralSpeed,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "速度",
+    Callback = function(Value)
+        SphereConfig.SpiralSpeed = Value
+    end
+})
+
+local SphereSection4 = SphereTab:AddSection({
+    Name = "効果設定"
+})
+
+SphereTab:AddSlider({
+    Name = "波の速度",
+    Min = 0,
+    Max = 3,
+    Default = SphereConfig.WaveSpeed,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "速度",
+    Callback = function(Value)
+        SphereConfig.WaveSpeed = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "波の振幅",
+    Min = 0,
+    Max = 2,
+    Default = SphereConfig.WaveAmplitude,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "studs",
+    Callback = function(Value)
+        SphereConfig.WaveAmplitude = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "脈動速度",
+    Min = 0,
+    Max = 3,
+    Default = SphereConfig.PulseSpeed,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "速度",
+    Callback = function(Value)
+        SphereConfig.PulseSpeed = Value
+    end
+})
+
+SphereTab:AddSlider({
+    Name = "脈動振幅",
+    Min = 0,
+    Max = 1,
+    Default = SphereConfig.PulseAmplitude,
+    Color = Theme.SliderColor,
+    Increment = 0.1,
+    ValueName = "studs",
+    Callback = function(Value)
+        SphereConfig.PulseAmplitude = Value
+    end
+})
+
+local SphereSection5 = SphereTab:AddSection({
+    Name = "制御"
+})
+
+SphereTab:AddButton({
+    Name = "オブジェクトを再検出",
+    Callback = function()
+        if SphereConfig.Enabled then
+            toggleSphere(false)
+            task.wait(0.1)
+            toggleSphere(true)
+            OrionLib:MakeNotification({
+                Name = "再検出完了",
+                Content = "オブジェクトを再検出しました",
+                Image = "rbxassetid://4483362458",
+                Time = 3
+            })
+        end
+    end
+})
+
+-- ====================================================================
+-- タブ10: Mi(=^・^=) - 新機能追加（ESP, FOV）
 -- ====================================================================
 local UtilityTab = Window:MakeTab({
     Name = "Mi(=^・^=)",
@@ -4126,7 +4637,7 @@ local UtilityTab = Window:MakeTab({
 })
 
 local UtilitySection1 = UtilityTab:AddSection({
-    Name = "便利機能"
+    Name = "移動機能"
 })
 
 UtilityTab:AddToggle({
@@ -4145,19 +4656,110 @@ UtilityTab:AddToggle({
     end
 })
 
+UtilityTab:AddToggle({
+    Name = "TPWalk (高速移動)",
+    Default = false,
+    Callback = function(Value)
+        toggleTPWalk(Value)
+    end
+})
+
+UtilityTab:AddSlider({
+    Name = "TPWalk速度",
+    Min = 16,
+    Max = UtilityConfig.TPWalkSpeedMax,
+    Default = UtilityConfig.TPWalkSpeed,
+    Color = Theme.SliderColor,
+    Increment = 5,
+    ValueName = "速度",
+    Callback = function(Value)
+        UtilityConfig.TPWalkSpeed = Value
+        if UtilityConfig.TPWalk then
+            -- TPWalkが有効な場合は速度を更新
+            toggleTPWalk(false)
+            task.wait(0.1)
+            toggleTPWalk(true)
+        end
+    end
+})
+
 local UtilitySection2 = UtilityTab:AddSection({
+    Name = "視覚機能"
+})
+
+-- ESP機能
+UtilityTab:AddToggle({
+    Name = "ESP (プレイヤー名表示)",
+    Default = false,
+    Callback = function(Value)
+        toggleESP(Value)
+    end
+})
+
+-- FOV機能
+UtilityTab:AddSlider({
+    Name = "FOV (視野角)",
+    Min = UtilityConfig.MinFOV,
+    Max = UtilityConfig.MaxFOV,
+    Default = UtilityConfig.FOV,
+    Color = Theme.SliderColor,
+    Increment = 1,
+    ValueName = "度",
+    Callback = function(Value)
+        UtilityConfig.FOV = Value
+        updateFOV()
+    end
+})
+
+UtilityTab:AddButton({
+    Name = "FOVをリセット",
+    Callback = function()
+        resetFOV()
+        OrionLib:MakeNotification({
+            Name = "FOVリセット",
+            Content = "FOVをデフォルト値(" .. UtilityConfig.OriginalFOV .. ")にリセットしました",
+            Image = "rbxassetid://4483362458",
+            Time = 2
+        })
+    end
+})
+
+local UtilitySection3 = UtilityTab:AddSection({
     Name = "情報"
 })
 
 UtilityTab:AddLabel("現在のプレイヤー: " .. LocalPlayer.Name)
+UtilityTab:AddLabel("現在のオブジェクトID: " .. ObjectIDConfig.CurrentObjectID)
+UtilityTab:AddLabel("現在のFOV: " .. UtilityConfig.FOV .. "度")
 UtilityTab:AddLabel("ゲーム: " .. game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name)
 
+local UtilitySection4 = UtilityTab:AddSection({
+    Name = "制御"
+})
+
 UtilityTab:AddButton({
-    Name = "スクリプトを再読み込み",
+    Name = "全機能を停止",
     Callback = function()
+        -- 全ての機能を停止
+        if FeatherConfig.Enabled then toggleFeather(false) end
+        if RingConfig.Enabled then toggleRingAura(false) end
+        if HeartConfig.Enabled then toggleHeart(false) end
+        if BigHeartConfig.Enabled then toggleBigHeart(false) end
+        if StarOfDavidConfig.Enabled then toggleStarOfDavid(false) end
+        if StarConfig.Enabled then toggleStar(false) end
+        if SuperRingConfig.Enabled then toggleSuperRing(false) end
+        if Star2Config.Enabled then toggleStar2(false) end
+        if SphereConfig.Enabled then toggleSphere(false) end
+        if UtilityConfig.TPWalk then toggleTPWalk(false) end
+        if UtilityConfig.Noclip then toggleNoclip(false) end
+        if UtilityConfig.ESP then toggleESP(false) end
+        
+        -- FOVをリセット
+        resetFOV()
+        
         OrionLib:MakeNotification({
-            Name = "再読み込み",
-            Content = "ゲームを再起動してスクリプトを再実行してください",
+            Name = "全機能停止",
+            Content = "全ての機能を停止し、FOVをリセットしました",
             Image = "rbxassetid://4483362458",
             Time = 3
         })
@@ -4169,7 +4771,7 @@ UtilityTab:AddButton({
 -- ====================================================================
 OrionLib:MakeNotification({
     Name = "さくらhub起動",
-    Content = "全10タブの機能が使用可能です",
+    Content = "全11タブの機能が使用可能です (DeltaExecutor対応版)",
     Image = "rbxassetid://4483362458",
     Time = 5
 })
@@ -4205,14 +4807,16 @@ OrionLib = OrionLibFunctions
 OrionLib:Init()
 
 print("さくらhubが起動しました")
-print("羽[Feather]機能: 背中側に横一列配置")
-print("魔法陣［RingX2］機能: 独立した魔法陣")
+print("追加オブジェクトID: GlassBoxGray, MusicKeyboard, SpookyCandle1, Tetracube1, NinjaKatana")
+print("羽[Feather]機能: 背中側に横一列配置・左右対称化")
+print("魔法陣［RingX2］機能: 独立した魔法陣（再検出ボタン追加）")
 print("♡ハート♡機能: ハート形配置")
 print("おっきぃ♡機能: 大きいハート形配置（速度拡張版）")
 print("ダビデ✡機能: ダビデ星形配置")
 print("スター★機能: ⭐️形配置")
 print("SuperRing機能: 竜巻効果付きリング")
-print("卍マンジ機能: 卍形配置（新規追加）")
-print("スター2✫機能: 太陽形配置・超高速・巨大（新規追加）")
-print("Mi(=^・^=)機能: 便利機能")
+print("スター2✫機能: 太陽形配置・超高速・巨大（広がりすぎ防止）")
+print("球体◯機能: 竜巻の仕組みを利用した立体球体配置（新規追加）")
+print("Mi(=^・^=)機能: ESP, FOV調整(最大180～最小-5), TPWalk(スマホ対応)")
 print("UIテーマ: 茶色背景, ピンクスライダー")
+print("DeltaExecutor対応版 - 羽(Wing)2削除・三人称機能削除・球体◯機能追加")
